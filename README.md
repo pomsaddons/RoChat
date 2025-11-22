@@ -17,7 +17,6 @@ A lightweight chat stack that creates one SignalR channel per Roblox jobId.
 
 ```powershell
 # Restore + build everything
-cd C:\Users\logan\Downloads\bloxstrap-main(2)\bloxstrap-main
  dotnet build BloxCord.sln
 
 # Start the chat backend on http://localhost:5158
@@ -42,3 +41,4 @@ cd C:\Users\logan\Downloads\bloxstrap-main(2)\bloxstrap-main
 - Typing notifications flow through the new `NotifyTyping` hub method and `TypingIndicator` broadcast. The client shows "typing..." hints inline plus badges on the participant list.
 - The client relies on `RobloxLogParser.TryReadLatestAsync` and `RobloxUserDirectory.TryGetUsernameAsync` to reproduce the same jobId/username discovery approach that Bloxstrap already uses, and `RobloxAvatarDirectory.TryGetHeadshotUrlAsync` to keep the rounded dark UI stocked with Roblox profile pictures.
 - Swagger UI is available at `http://localhost:5158/swagger` for quick testing.
+
