@@ -1,0 +1,147 @@
+using System.Windows;
+using System.Windows.Media;
+using BloxCord.Client.Services;
+using BloxCord.Client.ViewModels;
+
+namespace BloxCord.Client;
+
+public partial class SettingsWindow : Window
+{
+    private readonly MainWindow _mainWindow;
+    private readonly MainViewModel _viewModel;
+
+    public SettingsWindow(MainWindow mainWindow)
+    {
+        InitializeComponent();
+        _mainWindow = mainWindow;
+        _viewModel = (MainViewModel)mainWindow.DataContext;
+        DataContext = _viewModel;
+        
+        // Initialize state based on current background
+        if (_mainWindow.MainGrid.Background is LinearGradientBrush gradient)
+        {
+            GradientCheckBox.IsChecked = true;
+            ColorPanel.Visibility = Visibility.Collapsed;
+            GradientPanel.Visibility = Visibility.Visible;
+            
+            if (gradient.GradientStops.Count >= 2)
+            {
+                GradientStartInput.Text = gradient.GradientStops[0].Color.ToString();
+                GradientEndInput.Text = gradient.GradientStops[1].Color.ToString(); // Assuming 2nd stop is the end or close to it
+            }
+        }
+        else if (_mainWindow.MainGrid.Background is SolidColorBrush solid)
+        {
+            GradientCheckBox.IsChecked = false;
+            ColorPanel.Visibility = Visibility.Visible;
+            GradientPanel.Visibility = Visibility.Collapsed;
+            ColorInput.Text = solid.Color.ToString();
+        }
+
+        // Subscribe to events after initialization to avoid null reference during InitializeComponent
+        GradientCheckBox.Checked += GradientCheckBox_Checked;
+        GradientCheckBox.Unchecked += GradientCheckBox_Checked;
+    }
+
+    private async void LoadSession_Click(object sender, RoutedEventArgs e)
+    {
+        _viewModel.StatusMessage = "Reading Roblox logs...";
+
+        try
+        {
+            var session = await RobloxLogParser.TryReadLatestAsync();
+
+            if (session is null)
+            {
+                _viewModel.StatusMessage = "No active Roblox session detected.";
+                MessageBox.Show("No active Roblox session detected in logs.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(session.Username))
+                _viewModel.Username = session.Username;
+
+            _viewModel.JobId = session.JobId;
+            _viewModel.UserId = session.UserId?.ToString() ?? string.Empty;
+            _viewModel.SessionUserId = session.UserId;
+            _viewModel.StatusMessage = "Session info loaded from Roblox logs.";
+        }
+        catch (Exception ex)
+        {
+            _viewModel.StatusMessage = $"Failed to read logs: {ex.Message}";
+            MessageBox.Show($"Failed to read logs: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void GradientCheckBox_Checked(object sender, RoutedEventArgs e)
+    {
+        if (GradientCheckBox.IsChecked == true)
+        {
+            ColorPanel.Visibility = Visibility.Collapsed;
+            GradientPanel.Visibility = Visibility.Visible;
+            ApplyGradient();
+        }
+        else
+        {
+            ColorPanel.Visibility = Visibility.Visible;
+            GradientPanel.Visibility = Visibility.Collapsed;
+            ApplyColor();
+        }
+    }
+
+
+    private void ApplyColor_Click(object sender, RoutedEventArgs e)
+    {
+        ApplyColor();
+    }
+    
+    private void ApplyGradient_Click(object sender, RoutedEventArgs e)
+    {
+        ApplyGradient();
+    }
+
+    private void ApplyColor()
+    {
+        try
+        {
+            var color = (Color)ColorConverter.ConvertFromString(ColorInput.Text);
+            _mainWindow.MainGrid.Background = new SolidColorBrush(color);
+        }
+        catch
+        {
+            MessageBox.Show("Invalid color format. Use hex (e.g. #000000).", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void ApplyGradient()
+    {
+        try 
+        {
+            var startColor = (Color)ColorConverter.ConvertFromString(GradientStartInput.Text);
+            var endColor = (Color)ColorConverter.ConvertFromString(GradientEndInput.Text);
+
+            var gradient = new LinearGradientBrush
+            {
+                StartPoint = new Point(0, 0),
+                EndPoint = new Point(1, 1)
+            };
+            gradient.GradientStops.Add(new GradientStop(startColor, 0));
+            gradient.GradientStops.Add(new GradientStop(endColor, 1));
+
+            _mainWindow.MainGrid.Background = gradient;
+        }
+        catch
+        {
+             // Fallback to default if parsing fails
+            if (_mainWindow.Resources["AppBackground"] is LinearGradientBrush defaultGradient)
+            {
+                _mainWindow.MainGrid.Background = defaultGradient;
+            }
+        }
+    }
+
+    private void Close_Click(object sender, RoutedEventArgs e)
+    {
+        Close();
+    }
+}
