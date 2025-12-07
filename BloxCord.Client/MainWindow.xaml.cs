@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using System.Windows.Media;
 using BloxCord.Client.Models;
 using BloxCord.Client.Services;
 using BloxCord.Client.ViewModels;
@@ -26,6 +27,40 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        
+        // Load config
+        ConfigService.Load();
+        _viewModel.BackendUrl = ConfigService.Current.BackendUrl;
+        _viewModel.Username = ConfigService.Current.Username;
+        
+        // Apply theme
+        if (ConfigService.Current.UseGradient)
+        {
+            try
+            {
+                var startColor = (Color)ColorConverter.ConvertFromString(ConfigService.Current.GradientStart);
+                var endColor = (Color)ColorConverter.ConvertFromString(ConfigService.Current.GradientEnd);
+                var gradient = new LinearGradientBrush
+                {
+                    StartPoint = new Point(0, 0),
+                    EndPoint = new Point(1, 1)
+                };
+                gradient.GradientStops.Add(new GradientStop(startColor, 0));
+                gradient.GradientStops.Add(new GradientStop(endColor, 1));
+                MainGrid.Background = gradient;
+            }
+            catch { }
+        }
+        else
+        {
+            try
+            {
+                var color = (Color)ColorConverter.ConvertFromString(ConfigService.Current.SolidColor);
+                MainGrid.Background = new SolidColorBrush(color);
+            }
+            catch { }
+        }
+
         DataContext = _viewModel;
         Closed += async (_, _) => await DisposeClientAsync();
 
@@ -35,10 +70,19 @@ public partial class MainWindow : Window
         };
 
         _typingTimer.Tick += TypingTimer_Tick;
+
+        _viewModel.Messages.CollectionChanged += (s, e) =>
+        {
+            if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add)
+            {
+                MessagesScrollViewer.ScrollToBottom();
+            }
+        };
     }
 
     private async void Connect_Click(object sender, RoutedEventArgs e)
     {
+        _viewModel.IsServerBrowserVisible = false;
         // Auto-load session info first
         _viewModel.StatusMessage = "Reading Roblox logs...";
         try
@@ -52,6 +96,7 @@ public partial class MainWindow : Window
                 _viewModel.JobId = session.JobId;
                 _viewModel.UserId = session.UserId?.ToString() ?? string.Empty;
                 _viewModel.SessionUserId = session.UserId;
+                _viewModel.PlaceId = session.PlaceId;
                 _viewModel.StatusMessage = "Session info loaded from Roblox logs.";
             }
             else
@@ -94,7 +139,7 @@ public partial class MainWindow : Window
 
             var userId = ResolveUserId();
 
-            await _chatClient.ConnectAsync(_viewModel.Username, _viewModel.JobId, userId);
+            await _chatClient.ConnectAsync(_viewModel.Username, _viewModel.JobId, userId, _viewModel.PlaceId);
 
             _viewModel.IsConnected = true;
             _viewModel.StatusMessage = $"Connected to channel {_viewModel.JobId}.";
@@ -226,7 +271,8 @@ public partial class MainWindow : Window
                                 Content = $"{dto.Username} joined the chat",
                                 Timestamp = DateTime.Now,
                                 JobId = _viewModel.JobId,
-                                IsSystemMessage = true
+                                IsSystemMessage = true,
+                                AvatarUrl = dto.AvatarUrl ?? string.Empty
                             });
                         }
                     }
@@ -286,6 +332,17 @@ public partial class MainWindow : Window
 
             foreach (var message in prepared)
                 _viewModel.Messages.Add(message);
+
+            // Add Safety Warning
+            _viewModel.Messages.Add(new ClientChatMessage
+            {
+                Username = "System",
+                Content = "This chat is unmoderated. Be careful sharing personal information and connecting outside of RoChat.",
+                Timestamp = DateTime.Now,
+                JobId = _viewModel.JobId,
+                IsSystemMessage = true,
+                AvatarUrl = string.Empty
+            });
         }, DispatcherPriority.Background);
     }
 
@@ -425,6 +482,110 @@ public partial class MainWindow : Window
         settings.Owner = this;
         settings.ShowDialog();
     }
+
+    private void OnGamesListReceived(object? sender, List<GameDto> games)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            _viewModel.Games.Clear();
+            foreach (var game in games)
+                _viewModel.Games.Add(game);
+        });
+    }
+
+    private async void Browse_Click(object sender, RoutedEventArgs e)
+    {
+        _viewModel.IsServerBrowserVisible = true;
+        
+        try
+        {
+            if (_chatClient == null)
+            {
+                _chatClient = new ChatClient(_viewModel.BackendUrl);
+            }
+
+            _chatClient.GamesListReceived -= OnGamesListReceived;
+            _chatClient.GamesListReceived += OnGamesListReceived;
+
+            await _chatClient.GetGamesAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Failed to load games: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void Back_Click(object sender, RoutedEventArgs e)
+    {
+        _viewModel.IsServerBrowserVisible = false;
+    }
+
+    private async void JoinServer_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is string jobId)
+        {
+            // Find the game for this job
+            var game = _viewModel.Games.FirstOrDefault(g => g.Servers.Any(s => s.JobId == jobId));
+            if (game != null)
+            {
+                try
+                {
+                    // Use roblox-player: protocol
+                    var placeId = game.PlaceId;
+                    var targetJobId = game.Servers.FirstOrDefault(s => s.JobId == (string)btn.Tag)?.JobId ?? (string)btn.Tag;
+
+                    var url = $"roblox-player:1+launchmode:play+placeId:{placeId}+gameId:{targetJobId}";
+                    
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = url,
+                        UseShellExecute = true
+                    });
+
+                    // Auto connect chat
+                    _viewModel.JobId = jobId;
+                    _viewModel.PlaceId = game.PlaceId;
+                    _viewModel.IsServerBrowserVisible = false;
+                    
+                    // We need a username to connect
+                    if (string.IsNullOrWhiteSpace(_viewModel.Username))
+                    {
+                        // Try to get from logs or prompt
+                        var session = await RobloxLogParser.TryReadLatestAsync();
+                        if (session != null && !string.IsNullOrWhiteSpace(session.Username))
+                        {
+                            _viewModel.Username = session.Username;
+                            _viewModel.UserId = session.UserId?.ToString() ?? string.Empty;
+                        }
+                        else
+                        {
+                            MessageBox.Show("Please enter a username in settings or start Roblox first.", "Username Required");
+                            return;
+                        }
+                    }
+
+                    await DisposeClientAsync();
+                    _chatClient = new ChatClient(_viewModel.BackendUrl);
+                    _chatClient.MessageReceived += HandleMessageReceived;
+                    _chatClient.ParticipantsChanged += HandleParticipantsChanged;
+                    _chatClient.HistoryReceived += HandleHistoryReceived;
+                    _chatClient.TypingIndicatorReceived += HandleTypingIndicator;
+
+                    var userId = ResolveUserId();
+                    await _chatClient.ConnectAsync(_viewModel.Username, _viewModel.JobId, userId, _viewModel.PlaceId);
+                    _viewModel.IsConnected = true;
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Failed to join: {ex.Message}");
+                }
+            }
+        }
+    }
+
+    private void Minimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+    private void Maximize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+    private void Close_Click(object sender, RoutedEventArgs e) => Close();
 }
 
 internal sealed record AvatarResolution(long? UserId, string AvatarUrl);

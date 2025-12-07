@@ -93,3 +93,36 @@ public sealed class TypingNotificationDto
     public bool IsTyping { get; set; }
         = false;
 }
+
+public class GameDto
+{
+    [JsonPropertyName("placeId")]
+    public long PlaceId { get; set; }
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonPropertyName("imageUrl")]
+    public string ImageUrl { get; set; } = string.Empty;
+
+    [JsonPropertyName("serverCount")]
+    public int ServerCount { get; set; }
+
+    [JsonPropertyName("playerCount")]
+    public int PlayerCount { get; set; }
+
+    [JsonPropertyName("servers")]
+    public List<ServerDto> Servers { get; set; } = new();
+}
+
+public class ServerDto
+{
+    [JsonPropertyName("jobId")]
+    public string JobId { get; set; } = string.Empty;
+
+    [JsonPropertyName("playerCount")]
+    public int PlayerCount { get; set; }
+
+    [JsonPropertyName("avatarUrls")]
+    public List<string> AvatarUrls { get; set; } = new();
+}

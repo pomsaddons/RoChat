@@ -5,12 +5,18 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:converters="clr-namespace:BloxCord.Client.Converters"
         mc:Ignorable="d"
-        Title="Roblox Server Chat"
-        Height="640"
-        Width="1050"
+        Title="RoChat"
+        Height="720"
+        Width="1100"
         WindowStartupLocation="CenterScreen"
         Background="#020617"
-        Foreground="White">
+        Foreground="White"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        ResizeMode="CanResizeWithGrip">
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="32" ResizeBorderThickness="6" CornerRadius="0" GlassFrameThickness="0"/>
+    </WindowChrome.WindowChrome>
     <Window.Resources>
         <LinearGradientBrush x:Key="AppBackground" StartPoint="0,0" EndPoint="1,1">
             <GradientStop Color="#050505" Offset="0" />
@@ -75,243 +81,495 @@
                 </DoubleAnimation.EasingFunction>
             </DoubleAnimation>
         </Storyboard>
+        <Style x:Key="WindowButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#888"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Width" Value="46"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#22FFFFFF"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="WindowCloseButtonStyle" TargetType="Button" BasedOn="{StaticResource WindowButtonStyle}">
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#E81123"/>
+                    <Setter Property="Foreground" Value="White"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
 
-    <Grid x:Name="MainGrid" Background="{StaticResource AppBackground}" Margin="12" Opacity="0">
-        <Grid.RenderTransform>
-            <TranslateTransform Y="20"/>
-        </Grid.RenderTransform>
-        <Grid.Triggers>
-            <EventTrigger RoutedEvent="Loaded">
-                <BeginStoryboard Storyboard="{StaticResource FadeInStoryboard}"/>
-            </EventTrigger>
-        </Grid.Triggers>
-        <Border Background="#080808E0" CornerRadius="{StaticResource LargeRadius}" Padding="16">
-            <Border.Effect>
-                <DropShadowEffect Color="#000000" Opacity="0.35" ShadowDepth="0" BlurRadius="24" />
-            </Border.Effect>
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
 
-                <!-- Header / Connection Controls -->
-                <Grid Margin="0,0,0,16">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock Text="Roblox Chat" FontSize="18" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" Margin="0,0,12,0"/>
-                        <Border Background="#2A2A2A" CornerRadius="8" Padding="8,4" VerticalAlignment="Center" Visibility="{Binding IsConnected, Converter={StaticResource BooleanToVisibilityConverter}}">
-                            <StackPanel Orientation="Horizontal">
-                                <Ellipse Width="8" Height="8" Fill="#34C759" Margin="0,0,6,0"/>
-                                <TextBlock Text="{Binding JobId}" FontSize="12" Foreground="#CCCCCC"/>
-                                <TextBlock Text=" • " FontSize="12" Foreground="#666666"/>
-                                <TextBlock Text="{Binding ParticipantCount, StringFormat={}{0} Online}" FontSize="12" Foreground="#AAAAAA"/>
-                            </StackPanel>
+        <!-- Title Bar -->
+        <Grid Grid.Row="0" Height="32" Background="Transparent">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal" Margin="12,0">
+                <TextBlock Text="RoChat" VerticalAlignment="Center" Foreground="#888" FontSize="12" FontWeight="SemiBold"/>
+            </StackPanel>
+            <StackPanel Grid.Column="2" Orientation="Horizontal" WindowChrome.IsHitTestVisibleInChrome="True">
+                <Button Style="{StaticResource WindowButtonStyle}" Click="Minimize_Click" Content="_"/>
+                <Button Style="{StaticResource WindowButtonStyle}" Click="Maximize_Click" Content="[]"/>
+                <Button Style="{StaticResource WindowCloseButtonStyle}" Click="Close_Click" Content="X"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Main Content -->
+        <Grid Grid.Row="1" x:Name="MainGrid" Background="{StaticResource AppBackground}" Margin="12,0,12,12" Opacity="0">
+            <Grid.RenderTransform>
+                <TranslateTransform Y="20"/>
+            </Grid.RenderTransform>
+            <Grid.Triggers>
+                <EventTrigger RoutedEvent="Loaded">
+                    <BeginStoryboard Storyboard="{StaticResource FadeInStoryboard}"/>
+                </EventTrigger>
+            </Grid.Triggers>
+            
+             <Border Background="#080808E0" CornerRadius="{StaticResource LargeRadius}" Padding="16">
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000" Opacity="0.35" ShadowDepth="0" BlurRadius="24" />
+                </Border.Effect>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Header / Connection Controls -->
+                    <Grid Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="RoChat" FontSize="18" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                            <Border Background="#2A2A2A" CornerRadius="8" Padding="8,4" VerticalAlignment="Center" Visibility="{Binding IsConnected, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Width="8" Height="8" Fill="#34C759" Margin="0,0,6,0"/>
+                                    <TextBlock Text="{Binding JobId}" FontSize="12" Foreground="#CCCCCC"/>
+                                    <TextBlock Text=" • " FontSize="12" Foreground="#666666"/>
+                                    <TextBlock Text="{Binding ParticipantCount, StringFormat={}{0} Online}" FontSize="12" Foreground="#AAAAAA"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <Button Content="Browse" Width="80" Margin="0,0,8,0" Background="#2A2A2A" BorderBrush="#555555" Click="Browse_Click" FontSize="13"/>
+                            <Button Content="Settings" Width="80" Margin="0,0,8,0" Background="#2A2A2A" BorderBrush="#555555" Click="Settings_Click" FontSize="13"/>
+                            <Button Content="Connect" Width="90" Margin="0,0,0,0" Background="#3A3A3A" BorderBrush="#6B6B6B" Click="Connect_Click" FontSize="13">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsConnected}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                            <Button Content="Disconnect" Width="90" Margin="0,0,0,0" Background="#1F1F1F" BorderBrush="#5A5A5A" Click="Disconnect_Click" FontSize="13" Visibility="{Binding IsConnected, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Main content area -->
+                    <Grid Grid.Row="1" Margin="0,0,0,0">
+                        <Grid.Style>
+                            <Style TargetType="Grid">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsServerBrowserVisible}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Grid.Style>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="3*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Messages -->
+                        <Border Background="{StaticResource CardBrush}" CornerRadius="{StaticResource MediumRadius}" Padding="0" Margin="0,0,10,0">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <ScrollViewer x:Name="MessagesScrollViewer" Grid.Row="0" VerticalScrollBarVisibility="Hidden" Padding="12">
+                                    <ItemsControl ItemsSource="{Binding Messages}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Margin="0,0,0,12" RenderTransformOrigin="0.5,0.5">
+                                                    <Grid.RenderTransform>
+                                                        <TranslateTransform/>
+                                                    </Grid.RenderTransform>
+                                                    <Grid.Triggers>
+                                                        <EventTrigger RoutedEvent="Loaded">
+                                                            <BeginStoryboard Storyboard="{StaticResource FadeInStoryboard}"/>
+                                                        </EventTrigger>
+                                                    </Grid.Triggers>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    
+                                                    <Border>
+                                                        <Border.Style>
+                                                            <Style TargetType="Border" BasedOn="{StaticResource AvatarBorder}">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsSystemMessage}" Value="True">
+                                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
+                                                        <Grid>
+                                                            <Border Background="#333333" CornerRadius="20"/>
+                                                            <Border CornerRadius="20">
+                                                                <Border.Background>
+                                                                    <ImageBrush ImageSource="{Binding AvatarUrl}" Stretch="UniformToFill"/>
+                                                                </Border.Background>
+                                                            </Border>
+                                                        </Grid>
+                                                    </Border>
+
+                                                    <StackPanel Grid.Column="1">
+                                                        <StackPanel.Style>
+                                                            <Style TargetType="StackPanel">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsSystemMessage}" Value="True">
+                                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </StackPanel.Style>
+                                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                            <TextBlock Text="{Binding Username}" FontWeight="Bold" Foreground="#FFFFFF" FontSize="14"/>
+                                                            <TextBlock Text="{Binding Timestamp, StringFormat={}{0:t}}" FontSize="11" Foreground="#888888" Margin="8,2,0,0" VerticalAlignment="Bottom"/>
+                                                        </StackPanel>
+                                                        <Border Background="#252525" CornerRadius="0,12,12,12" Padding="12,8" HorizontalAlignment="Left">
+                                                            <TextBlock Text="{Binding Content}" TextWrapping="Wrap" Foreground="#E0E0E0" FontSize="14" LineHeight="20"/>
+                                                        </Border>
+                                                    </StackPanel>
+
+                                                    <!-- System Message Template -->
+                                                    <Border Grid.Column="0" Grid.ColumnSpan="2" Background="#2A2A2A" CornerRadius="8" Padding="10,6" HorizontalAlignment="Center" Margin="0,4">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsSystemMessage}" Value="True">
+                                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
+                                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <Border Width="20" Height="20" CornerRadius="10" Margin="0,0,8,0" VerticalAlignment="Center">
+                                                                <Border.Background>
+                                                                    <ImageBrush ImageSource="{Binding AvatarUrl}" Stretch="UniformToFill"/>
+                                                                </Border.Background>
+                                                            </Border>
+                                                            <TextBlock Text="{Binding Content}" Foreground="#AAAAAA" FontSize="12" FontStyle="Italic" VerticalAlignment="Center"/>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                                <Border Grid.Row="1" Margin="12,0,12,12" Padding="10,4" Background="#141414" CornerRadius="30" Visibility="{Binding IsTypingIndicatorVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <TextBlock Text="{Binding TypingIndicator}" Foreground="#DDDDDD" FontStyle="Italic" FontSize="12"/>
+                                </Border>
+                            </Grid>
                         </Border>
-                    </StackPanel>
 
-                    <StackPanel Grid.Column="1" Orientation="Horizontal">
-                        <Button Content="Settings" Width="80" Margin="0,0,8,0" Background="#2A2A2A" BorderBrush="#555555" Click="Settings_Click" FontSize="13"/>
-                        <Button Content="Connect" Width="90" Margin="0,0,0,0" Background="#3A3A3A" BorderBrush="#6B6B6B" Click="Connect_Click" FontSize="13">
-                            <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-                                    <Setter Property="Visibility" Value="Visible"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsConnected}" Value="True">
-                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Button.Style>
-                        </Button>
-                        <Button Content="Disconnect" Width="90" Margin="0,0,0,0" Background="#1F1F1F" BorderBrush="#5A5A5A" Click="Disconnect_Click" FontSize="13" Visibility="{Binding IsConnected, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                    </StackPanel>
-                </Grid>
-
-                <!-- Main content area -->
-                <Grid Grid.Row="1" Margin="0,0,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="3*" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-
-                    <!-- Messages -->
-                    <Border Background="{StaticResource CardBrush}" CornerRadius="{StaticResource MediumRadius}" Padding="0" Margin="0,0,10,0">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="*" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-                            <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" Padding="12">
-                                <ItemsControl ItemsSource="{Binding Messages}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <StackPanel />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
+                        <!-- Participant list -->
+                        <Border Grid.Column="1" Background="{StaticResource CardBrush}" CornerRadius="{StaticResource MediumRadius}" Padding="{StaticResource CardPadding}">
+                            <StackPanel>
+                                <TextBlock Text="Participants" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12" Foreground="#CCCCCC"/>
+                                <ListBox ItemsSource="{Binding Participants}" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" Padding="0" Height="400">
+                                    <ListBox.ItemTemplate>
                                         <DataTemplate>
-                                            <Grid Margin="0,0,0,12" RenderTransformOrigin="0.5,0.5">
-                                                <Grid.RenderTransform>
-                                                    <TranslateTransform/>
-                                                </Grid.RenderTransform>
-                                                <Grid.Triggers>
-                                                    <EventTrigger RoutedEvent="Loaded">
-                                                        <BeginStoryboard Storyboard="{StaticResource FadeInStoryboard}"/>
-                                                    </EventTrigger>
-                                                </Grid.Triggers>
+                                            <Grid Margin="0,0,0,8" Background="Transparent">
+                                                <Grid.ContextMenu>
+                                                    <ContextMenu>
+                                                        <MenuItem Header="Go to Profile" Command="{Binding GoToProfileCommand}" />
+                                                    </ContextMenu>
+                                                </Grid.ContextMenu>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="Auto" />
                                                     <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
                                                 </Grid.ColumnDefinitions>
                                                 
-                                                <Border>
-                                                    <Border.Style>
-                                                        <Style TargetType="Border" BasedOn="{StaticResource AvatarBorder}">
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding IsSystemMessage}" Value="True">
-                                                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Border.Style>
+                                                <Border Width="32" Height="32" CornerRadius="16" Margin="0,0,10,0">
                                                     <Grid>
-                                                        <Border Background="#333333" CornerRadius="20"/>
-                                                        <Border CornerRadius="20">
+                                                        <Border Background="#333333" CornerRadius="16"/>
+                                                        <Border CornerRadius="16">
                                                             <Border.Background>
                                                                 <ImageBrush ImageSource="{Binding AvatarUrl}" Stretch="UniformToFill"/>
                                                             </Border.Background>
                                                         </Border>
                                                     </Grid>
                                                 </Border>
-
-                                                <StackPanel Grid.Column="1">
-                                                    <StackPanel.Style>
-                                                        <Style TargetType="StackPanel">
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding IsSystemMessage}" Value="True">
-                                                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </StackPanel.Style>
-                                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                                        <TextBlock Text="{Binding Username}" FontWeight="Bold" Foreground="#FFFFFF" FontSize="14"/>
-                                                        <TextBlock Text="{Binding Timestamp, StringFormat={}{0:t}}" FontSize="11" Foreground="#888888" Margin="8,2,0,0" VerticalAlignment="Bottom"/>
-                                                    </StackPanel>
-                                                    <Border Background="#252525" CornerRadius="0,12,12,12" Padding="12,8" HorizontalAlignment="Left">
-                                                        <TextBlock Text="{Binding Content}" TextWrapping="Wrap" Foreground="#E0E0E0" FontSize="14" LineHeight="20"/>
-                                                    </Border>
+                                                
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Username}" FontWeight="SemiBold" FontSize="13" Foreground="#F0F0F0"/>
+                                                    <TextBlock Text="{Binding UserId}" FontSize="10" Foreground="#888888" />
                                                 </StackPanel>
-
-                                                <!-- System Message Template -->
-                                                <Border Grid.Column="0" Grid.ColumnSpan="2" Background="#2A2A2A" CornerRadius="8" Padding="10,6" HorizontalAlignment="Center" Margin="0,4">
-                                                    <Border.Style>
-                                                        <Style TargetType="Border">
-                                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding IsSystemMessage}" Value="True">
-                                                                    <Setter Property="Visibility" Value="Visible"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Border.Style>
-                                                    <StackPanel Orientation="Horizontal">
-                                                        <TextBlock Text="??" Margin="0,0,6,0" FontSize="12"/>
-                                                        <TextBlock Text="{Binding Content}" Foreground="#AAAAAA" FontSize="12" FontStyle="Italic"/>
-                                                    </StackPanel>
+                                                
+                                                <Border Grid.Column="2" Background="#2B2B2B" CornerRadius="10" Padding="8,2" Visibility="{Binding IsTyping, Converter={StaticResource BooleanToVisibilityConverter}}" VerticalAlignment="Center">
+                                                    <TextBlock Text="..." FontSize="12" Foreground="#E0E0E0" FontWeight="Bold" />
                                                 </Border>
                                             </Grid>
                                         </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
-                            <Border Grid.Row="1" Margin="12,0,12,12" Padding="10,4" Background="#141414" CornerRadius="30" Visibility="{Binding IsTypingIndicatorVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                <TextBlock Text="{Binding TypingIndicator}" Foreground="#DDDDDD" FontStyle="Italic" FontSize="12"/>
-                            </Border>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <!-- Server Browser (Redesigned) -->
+                    <Grid Grid.Row="1" Margin="0,0,0,0" Visibility="{Binding IsServerBrowserVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <Border Background="{StaticResource CardBrush}" CornerRadius="{StaticResource MediumRadius}" Padding="16">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+                                <Grid Grid.Row="0" Margin="0,0,0,16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Active Servers" FontSize="20" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
+                                    <Button Grid.Column="1" Content="Back" Width="80" Background="#2A2A2A" BorderBrush="#555555" Click="Back_Click" FontSize="13"/>
+                                </Grid>
+                            <Grid Grid.Row="1">
+                                <!-- Game List -->
+                                <Grid>
+                                    <Grid.Style>
+                                        <Style TargetType="Grid">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsGameSelected}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Grid.Style>
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <ItemsControl ItemsSource="{Binding Games}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel Orientation="Horizontal" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Width="200" MinHeight="260" Margin="0,0,16,16" Background="#1A1A1A" CornerRadius="12" Padding="0">
+                                                        <Grid>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="*"/>
+                                                            </Grid.RowDefinitions>
+                                                            <Border CornerRadius="12,12,0,0" Height="150" ClipToBounds="True" Margin="0,0,0,0">
+                                                                <Button Background="Transparent" BorderThickness="0" Command="{Binding DataContext.OpenGamePageCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding PlaceId}" Cursor="Hand">
+                                                                    <Image Source="{Binding ImageUrl}" Stretch="UniformToFill"/>
+                                                                </Button>
+                                                            </Border>
+                                                            <Button Grid.Row="1" 
+                                                                    Command="{Binding DataContext.OpenGamePageCommand, RelativeSource={RelativeSource AncestorType=Window}}" 
+                                                                    CommandParameter="{Binding PlaceId}"
+                                                                    Background="Transparent" 
+                                                                    BorderThickness="0" 
+                                                                    Foreground="White" 
+                                                                    FontWeight="Bold" 
+                                                                    FontSize="16" 
+                                                                    Margin="12,12,12,4" 
+                                                                    HorizontalContentAlignment="Left"
+                                                                    Cursor="Hand">
+                                                                <Button.Template>
+                                                                    <ControlTemplate TargetType="Button">
+                                                                        <ContentPresenter />
+                                                                    </ControlTemplate>
+                                                                </Button.Template>
+                                                                <TextBlock Text="{Binding Name}" TextWrapping="Wrap" ToolTip="{Binding Name}"/>
+                                                            </Button>
+                                                            <StackPanel Grid.Row="2" Margin="12,0,12,12" VerticalAlignment="Bottom">
+                                                                <TextBlock Text="{Binding PlayerCount, StringFormat={}{0} Players Online}" Foreground="#AAAAAA" FontSize="12" Margin="0,0,0,8"/>
+                                                                <Button Content="See Servers" 
+                                                                        Command="{Binding DataContext.ViewServersCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                        CommandParameter="{Binding}"
+                                                                        Margin="0,0,0,0" 
+                                                                        Padding="8,6"
+                                                                        FontSize="12"
+                                                                        Background="#333333"
+                                                                        BorderBrush="#555555"/>
+                                                            </StackPanel>
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                    <TextBlock Text="No active servers found." 
+                                               Foreground="#666" 
+                                               HorizontalAlignment="Center" 
+                                               VerticalAlignment="Center" 
+                                               FontSize="16"
+                                               IsHitTestVisible="False">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Games.Count}" Value="0">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+
+                                <!-- Server List View -->
+                                <Grid Visibility="{Binding IsGameSelected, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                    </Grid.RowDefinitions>
+                                    
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                                        <Button Content="Back" Command="{Binding ClearSelectedGameCommand}" Width="60" Margin="0,0,12,0" Background="#2A2A2A" BorderBrush="#555555"/>
+                                        <TextBlock Text="{Binding SelectedGame.Name}" FontSize="18" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
+                                    </StackPanel>
+
+                                    <ScrollViewer Grid.Row="1">
+                                        <ItemsControl ItemsSource="{Binding SelectedGame.Servers}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel Orientation="Horizontal"/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Width="200" Background="#1A1A1A" CornerRadius="8" Margin="0,0,12,12" Padding="12">
+                                                        <StackPanel>
+                                                            <TextBlock Text="Server Instance" Foreground="#888" FontSize="12" Margin="0,0,0,4"/>
+                                                            <TextBlock Text="{Binding JobId}" Foreground="White" FontSize="11" TextTrimming="CharacterEllipsis" Margin="0,0,0,8" ToolTip="{Binding JobId}"/>
+                                                            
+                                                            <ItemsControl ItemsSource="{Binding AvatarUrls}" Margin="0,0,0,8" Height="28">
+                                                                <ItemsControl.ItemsPanel>
+                                                                    <ItemsPanelTemplate>
+                                                                        <StackPanel Orientation="Horizontal"/>
+                                                                    </ItemsPanelTemplate>
+                                                                </ItemsControl.ItemsPanel>
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate>
+                                                                        <Border Width="24" Height="24" CornerRadius="12" Margin="0,0,-8,0" BorderBrush="#1A1A1A" BorderThickness="2">
+                                                                            <Border.Background>
+                                                                                <ImageBrush ImageSource="{Binding}" Stretch="UniformToFill"/>
+                                                                            </Border.Background>
+                                                                        </Border>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+
+                                                            <TextBlock Text="{Binding PlayerCount, StringFormat={}{0} Players}" Foreground="#DDD" FontWeight="Bold" Margin="0,0,0,12"/>
+                                                            <Button Content="Join Server" 
+                                                                    Tag="{Binding JobId}"
+                                                                    Click="JoinServer_Click"
+                                                                    Padding="12,6"
+                                                                    Background="#333333"
+                                                                    BorderBrush="#555555"/>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </Grid>
+                            </Grid>
+                            </Grid>
+                        </Border>
+                    </Grid>
+
+                    <!-- Composer -->
+                    <Border Grid.Row="2" Margin="0,12,0,0" Background="{StaticResource CardBrush}" CornerRadius="{StaticResource MediumRadius}" Padding="12">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsServerBrowserVisible}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox Name="MessageInput"
+                                     Text="{Binding OutgoingMessage, UpdateSourceTrigger=PropertyChanged}"
+                                     AcceptsReturn="True"
+                                     Height="50"
+                                     VerticalScrollBarVisibility="Auto"
+                                     TextWrapping="Wrap"
+                                     TextChanged="MessageInput_TextChanged" 
+                                     BorderThickness="0"
+                                     Background="Transparent"
+                                     VerticalContentAlignment="Center"
+                                     Padding="0"/>
+                            <Button Grid.Column="1" Content="Send" Width="80" Margin="12,0,0,0" Background="{StaticResource PrimaryBrush}" BorderBrush="#B0B0B0" Foreground="#0A0A0A" Click="Send_Click" Height="40" VerticalAlignment="Bottom">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border CornerRadius="20" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
                         </Grid>
                     </Border>
 
-                    <!-- Participant list -->
-                    <Border Grid.Column="1" Background="{StaticResource CardBrush}" CornerRadius="{StaticResource MediumRadius}" Padding="{StaticResource CardPadding}">
-                        <StackPanel>
-                            <TextBlock Text="Participants" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12" Foreground="#CCCCCC"/>
-                            <ListBox ItemsSource="{Binding Participants}" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" Padding="0" Height="400">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <Grid Margin="0,0,0,8">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto" />
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="Auto" />
-                                            </Grid.ColumnDefinitions>
-                                            
-                                            <Border Width="32" Height="32" CornerRadius="16" Margin="0,0,10,0">
-                                                <Grid>
-                                                    <Border Background="#333333" CornerRadius="16"/>
-                                                    <Border CornerRadius="16">
-                                                        <Border.Background>
-                                                            <ImageBrush ImageSource="{Binding AvatarUrl}" Stretch="UniformToFill"/>
-                                                        </Border.Background>
-                                                    </Border>
-                                                </Grid>
-                                            </Border>
-                                            
-                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding Username}" FontWeight="SemiBold" FontSize="13" Foreground="#F0F0F0"/>
-                                                <TextBlock Text="{Binding UserId}" FontSize="10" Foreground="#888888" />
-                                            </StackPanel>
-                                            
-                                            <Border Grid.Column="2" Background="#2B2B2B" CornerRadius="10" Padding="8,2" Visibility="{Binding IsTyping, Converter={StaticResource BooleanToVisibilityConverter}}" VerticalAlignment="Center">
-                                                <TextBlock Text="..." FontSize="12" Foreground="#E0E0E0" FontWeight="Bold" />
-                                            </Border>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </StackPanel>
-                    </Border>
+                    <TextBlock Grid.Row="3" Margin="0,8,0,0" Text="{Binding StatusMessage}" Foreground="#888888" FontSize="11" HorizontalAlignment="Right"/>
                 </Grid>
-
-                <!-- Composer -->
-                <Border Grid.Row="2" Margin="0,12,0,0" Background="{StaticResource CardBrush}" CornerRadius="{StaticResource MediumRadius}" Padding="12">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBox Name="MessageInput"
-                                 Text="{Binding OutgoingMessage, UpdateSourceTrigger=PropertyChanged}"
-                                 AcceptsReturn="True"
-                                 Height="50"
-                                 VerticalScrollBarVisibility="Auto"
-                                 TextWrapping="Wrap"
-                                 TextChanged="MessageInput_TextChanged" 
-                                 BorderThickness="0"
-                                 Background="Transparent"
-                                 VerticalContentAlignment="Center"
-                                 Padding="0"/>
-                        <Button Grid.Column="1" Content="Send" Width="80" Margin="12,0,0,0" Background="{StaticResource PrimaryBrush}" BorderBrush="#B0B0B0" Foreground="#0A0A0A" Click="Send_Click" Height="40" VerticalAlignment="Bottom">
-                            <Button.Template>
-                                <ControlTemplate TargetType="Button">
-                                    <Border CornerRadius="20" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
-                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                    </Border>
-                                </ControlTemplate>
-                            </Button.Template>
-                        </Button>
-                    </Grid>
-                </Border>
-
-                <TextBlock Grid.Row="3" Margin="0,8,0,0" Text="{Binding StatusMessage}" Foreground="#888888" FontSize="11" HorizontalAlignment="Right"/>
-            </Grid>
-        </Border>
+            </Border>
+        </Grid>
     </Grid>
 </Window>

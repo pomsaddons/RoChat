@@ -1,0 +1,19 @@
+# .NET
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.userprefs
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Config
+config.json
+
+# OS
+.DS_Store
+Thumbs.db

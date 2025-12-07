@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using BloxCord.Client.Models;
 using System.Linq;
+using System.Windows.Input;
 
 namespace BloxCord.Client.ViewModels;
 
@@ -20,10 +21,68 @@ public class MainViewModel : INotifyPropertyChanged
     private bool _typingIndicatorVisible;
     private long? _sessionUserId;
     private int _participantCount;
+    private bool _isServerBrowserVisible;
+    private GameDto? _selectedGame;
 
     public ObservableCollection<ClientChatMessage> Messages { get; } = new();
 
     public ObservableCollection<ParticipantViewModel> Participants { get; } = new();
+
+    public ObservableCollection<GameDto> Games { get; } = new();
+
+    public ICommand OpenGamePageCommand { get; }
+    public ICommand ViewServersCommand { get; }
+    public ICommand ClearSelectedGameCommand { get; }
+
+    public MainViewModel()
+    {
+        OpenGamePageCommand = new RelayCommand(param =>
+        {
+            if (param is long placeId)
+            {
+                try
+                {
+                    var url = $"https://www.roblox.com/games/{placeId}";
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = url,
+                        UseShellExecute = true
+                    });
+                }
+                catch { }
+            }
+        });
+
+        ViewServersCommand = new RelayCommand(param =>
+        {
+            if (param is GameDto game)
+            {
+                SelectedGame = game;
+            }
+        });
+
+        ClearSelectedGameCommand = new RelayCommand(_ => SelectedGame = null);
+    }
+
+    public GameDto? SelectedGame
+    {
+        get => _selectedGame;
+        set
+        {
+            if (SetField(ref _selectedGame, value))
+            {
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsGameSelected)));
+            }
+        }
+    }
+
+    public bool IsGameSelected => SelectedGame != null;
+
+    public bool IsServerBrowserVisible
+    {
+        get => _isServerBrowserVisible;
+        set => SetField(ref _isServerBrowserVisible, value);
+    }
 
     public string BackendUrl
     {
@@ -88,6 +147,8 @@ public class MainViewModel : INotifyPropertyChanged
         get => _sessionUserId;
         set => SetField(ref _sessionUserId, value);
     }
+
+    public long? PlaceId { get; set; }
 
     public int ParticipantCount
     {

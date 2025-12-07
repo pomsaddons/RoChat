@@ -106,6 +106,10 @@ public partial class SettingsWindow : Window
         {
             var color = (Color)ColorConverter.ConvertFromString(ColorInput.Text);
             _mainWindow.MainGrid.Background = new SolidColorBrush(color);
+            
+            ConfigService.Current.UseGradient = false;
+            ConfigService.Current.SolidColor = ColorInput.Text;
+            ConfigService.Save();
         }
         catch
         {
@@ -129,6 +133,11 @@ public partial class SettingsWindow : Window
             gradient.GradientStops.Add(new GradientStop(endColor, 1));
 
             _mainWindow.MainGrid.Background = gradient;
+            
+            ConfigService.Current.UseGradient = true;
+            ConfigService.Current.GradientStart = GradientStartInput.Text;
+            ConfigService.Current.GradientEnd = GradientEndInput.Text;
+            ConfigService.Save();
         }
         catch
         {

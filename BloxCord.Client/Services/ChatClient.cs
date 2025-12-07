@@ -1,14 +1,15 @@
 using System.Net.Http;
 using System.Net.Http.Json;
-using Microsoft.AspNetCore.SignalR.Client;
+using SocketIOClient;
 using BloxCord.Client.Models;
+using System.Text.Json;
 
 namespace BloxCord.Client.Services;
 
 public sealed class ChatClient : IAsyncDisposable
 {
     private readonly HttpClient _httpClient;
-    private HubConnection? _hubConnection;
+    private SocketIOClient.SocketIO? _socket;
     private string? _jobId;
     private string? _username;
     private long? _userId;
@@ -35,7 +36,7 @@ public sealed class ChatClient : IAsyncDisposable
     public event EventHandler<List<ChatMessageDto>>? HistoryReceived;
     public event EventHandler<TypingIndicatorDto>? TypingIndicatorReceived;
 
-    public async Task ConnectAsync(string username, string jobId, long? userId, CancellationToken cancellationToken = default)
+    public async Task ConnectAsync(string username, string jobId, long? userId, long? placeId, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(username);
         ArgumentException.ThrowIfNullOrWhiteSpace(jobId);
@@ -44,87 +45,114 @@ public sealed class ChatClient : IAsyncDisposable
         _jobId = jobId;
         _userId = userId;
 
-        await CreateChannelAsync(username, jobId, userId, cancellationToken);
+        _socket = new SocketIOClient.SocketIO(BackendUrl);
 
-        _hubConnection = new HubConnectionBuilder()
-            .WithUrl($"{BackendUrl}/hubs/chat")
-            .WithAutomaticReconnect()
-            .Build();
-
-        _hubConnection.On<ChatMessageDto>("ReceiveMessage", message =>
+        _socket.On("receiveMessage", response =>
         {
+            var message = response.GetValue<ChatMessageDto>();
             MessageReceived?.Invoke(this, message);
         });
 
-        _hubConnection.On<string, List<ChannelParticipantDto>>("ParticipantsChanged", (job, participants) =>
+        _socket.On("participantsChanged", response =>
         {
-            ParticipantsChanged?.Invoke(this, participants);
+            var data = response.GetValue<ParticipantsChangedDto>();
+            ParticipantsChanged?.Invoke(this, data.Participants);
         });
 
-        _hubConnection.On<ChannelSnapshotDto>("ChannelSnapshot", snapshot =>
+        _socket.On("channelSnapshot", response =>
         {
+            var snapshot = response.GetValue<ChannelSnapshotDto>();
             HistoryReceived?.Invoke(this, snapshot.History ?? new List<ChatMessageDto>());
             ParticipantsChanged?.Invoke(this, snapshot.Participants ?? new List<ChannelParticipantDto>());
         });
 
-        _hubConnection.On<TypingIndicatorDto>("TypingIndicator", payload =>
+        _socket.On("typingIndicator", response =>
         {
+            var payload = response.GetValue<TypingIndicatorDto>();
             TypingIndicatorReceived?.Invoke(this, payload);
         });
 
-        await _hubConnection.StartAsync(cancellationToken);
-        await _hubConnection.InvokeAsync("JoinChannel", new ChannelJoinDto
+        _socket.On("gamesList", response =>
         {
-            JobId = jobId,
-            Username = username,
-            UserId = userId
-        }, cancellationToken);
+            var games = response.GetValue<List<GameDto>>();
+            GamesListReceived?.Invoke(this, games);
+        });
+
+        await _socket.ConnectAsync();
+
+        await _socket.EmitAsync("joinChannel", new
+        {
+            jobId = jobId,
+            username = username,
+            userId = userId,
+            placeId = placeId
+        });
     }
+
+    public async Task GetGamesAsync()
+    {
+        if (_socket is null || !_socket.Connected)
+        {
+            _socket = new SocketIOClient.SocketIO(BackendUrl);
+            _socket.On("gamesList", response =>
+            {
+                var games = response.GetValue<List<GameDto>>();
+                GamesListReceived?.Invoke(this, games);
+            });
+            await _socket.ConnectAsync();
+        }
+        await _socket.EmitAsync("getGames");
+    }
+
+    public event EventHandler<List<GameDto>>? GamesListReceived;
 
     public async Task SendAsync(string content, CancellationToken cancellationToken = default)
     {
-        if (_hubConnection is null || _jobId is null || _username is null)
+        if (_socket is null || !_socket.Connected || _jobId is null || _username is null)
             throw new InvalidOperationException("Client is not connected");
 
-        await _hubConnection.InvokeAsync("SendMessage", new PostChatMessageDto
+        await _socket.EmitAsync("sendMessage", new
         {
-            JobId = _jobId,
-            Username = _username,
-            UserId = _userId,
-            Content = content
-        }, cancellationToken);
+            jobId = _jobId,
+            username = _username,
+            userId = _userId,
+            content = content
+        });
     }
 
     public async Task NotifyTypingAsync(bool isTyping, CancellationToken cancellationToken = default)
     {
-        if (_hubConnection is null || _jobId is null || _username is null)
+        if (_socket is null || !_socket.Connected || _jobId is null || _username is null)
             return;
 
-        await _hubConnection.InvokeAsync("NotifyTyping", new TypingNotificationDto
+        await _socket.EmitAsync("notifyTyping", new
         {
-            JobId = _jobId,
-            Username = _username,
-            IsTyping = isTyping
-        }, cancellationToken);
+            jobId = _jobId,
+            username = _username,
+            isTyping = isTyping
+        });
     }
 
     private async Task CreateChannelAsync(string username, string jobId, long? userId, CancellationToken cancellationToken)
     {
-        var response = await _httpClient.PostAsJsonAsync("api/channels", new ChannelJoinDto
-        {
-            JobId = jobId,
-            Username = username,
-            UserId = userId
-        }, cancellationToken);
-
-        response.EnsureSuccessStatusCode();
+        // No longer needed with Socket.IO implementation as channel is created on join
+        await Task.CompletedTask;
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (_hubConnection is not null)
-            await _hubConnection.DisposeAsync();
-
+        if (_socket is not null)
+        {
+            await _socket.DisconnectAsync();
+            _socket.Dispose();
+            _socket = null;
+        }
         _httpClient.Dispose();
+    }
+
+    private class ParticipantsChangedDto
+    {
+        public string JobId { get; set; } = string.Empty;
+        public List<ChannelParticipantDto> Participants { get; set; } = new();
     }
 }

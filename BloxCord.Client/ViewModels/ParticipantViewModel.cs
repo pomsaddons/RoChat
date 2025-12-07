@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Windows.Input;
+using System.Diagnostics;
 
 namespace BloxCord.Client.ViewModels;
 
@@ -8,6 +10,32 @@ public class ParticipantViewModel : INotifyPropertyChanged
 {
     private string _avatarUrl = string.Empty;
     private bool _isTyping;
+
+    public ICommand GoToProfileCommand { get; }
+
+    public ParticipantViewModel()
+    {
+        GoToProfileCommand = new RelayCommand(_ => OpenProfile());
+    }
+
+    private void OpenProfile()
+    {
+        if (UserId.HasValue)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = $"https://www.roblox.com/users/{UserId}/profile",
+                    UseShellExecute = true
+                });
+            }
+            catch
+            {
+                // Ignore errors
+            }
+        }
+    }
 
     public string Username { get; init; } = string.Empty;
 
