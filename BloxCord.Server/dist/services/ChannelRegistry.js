@@ -20,6 +20,10 @@ class ChannelRegistry {
         for (const channel of this.channels.values()) {
             if (!channel.placeId)
                 continue;
+            if (channel.getParticipants().length === 0)
+                continue;
+            if (channel.jobId.startsWith('-'))
+                continue;
             if (!games.has(channel.placeId)) {
                 games.set(channel.placeId, {
                     placeId: channel.placeId,
@@ -45,10 +49,39 @@ class ChannelRegistry {
     getChannel(jobId) {
         return this.channels.get(jobId);
     }
+    searchUsers(query, jobId) {
+        const lowerQuery = query.toLowerCase();
+        const results = new Map();
+        if (jobId) {
+            const channel = this.channels.get(jobId);
+            if (channel) {
+                for (const p of channel.getParticipants()) {
+                    if (p.username.toLowerCase().includes(lowerQuery)) {
+                        results.set(p.username, p);
+                    }
+                }
+            }
+        }
+        else {
+            for (const channel of this.channels.values()) {
+                for (const p of channel.getParticipants()) {
+                    if (p.username.toLowerCase().includes(lowerQuery)) {
+                        if (!results.has(p.username)) {
+                            results.set(p.username, p);
+                        }
+                    }
+                }
+            }
+        }
+        return Array.from(results.values()).slice(0, 10);
+    }
     removeParticipant(jobId, username) {
         const channel = this.channels.get(jobId);
         if (channel) {
             channel.removeParticipant(username);
+            if (channel.getParticipants().length === 0) {
+                this.channels.delete(jobId);
+            }
         }
     }
     getParticipants(jobId) {

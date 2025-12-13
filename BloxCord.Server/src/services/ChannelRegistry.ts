@@ -19,6 +19,7 @@ export class ChannelRegistry {
         for (const channel of this.channels.values()) {
             if (!channel.placeId) continue;
             if (channel.getParticipants().length === 0) continue;
+            if (channel.jobId && channel.jobId.startsWith('-')) continue;
 
             if (!games.has(channel.placeId)) {
                 games.set(channel.placeId, {
@@ -42,7 +43,9 @@ export class ChannelRegistry {
             });
         }
 
-        return Array.from(games.values()).sort((a, b) => b.serverCount - a.serverCount);
+        const result = Array.from(games.values()).sort((a, b) => b.serverCount - a.serverCount);
+        console.log(`[ChannelRegistry] getGames returning ${result.length} games from ${this.channels.size} channels`);
+        return result;
     }
 
     public getChannel(jobId: string): ChannelRecord | undefined {
