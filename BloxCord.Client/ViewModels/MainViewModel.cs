@@ -23,19 +23,75 @@ public class MainViewModel : INotifyPropertyChanged
     private int _participantCount;
     private bool _isServerBrowserVisible;
     private GameDto? _selectedGame;
+    private ConversationViewModel? _selectedConversation;
+    private BannerViewModel? _banner;
+    private bool _isBannerVisible;
 
-    public ObservableCollection<ClientChatMessage> Messages { get; } = new();
+    public ObservableCollection<ConversationViewModel> Conversations { get; } = new();
+
+    // Proxy property for backward compatibility / ease of binding
+    public ObservableCollection<ClientChatMessage> Messages => SelectedConversation?.Messages ?? new ObservableCollection<ClientChatMessage>();
 
     public ObservableCollection<ParticipantViewModel> Participants { get; } = new();
 
     public ObservableCollection<GameDto> Games { get; } = new();
 
+    public BannerViewModel? Banner
+    {
+        get => _banner;
+        set => SetField(ref _banner, value);
+    }
+
+    public bool IsBannerVisible
+    {
+        get => _isBannerVisible;
+        set => SetField(ref _isBannerVisible, value);
+    }
+
     public ICommand OpenGamePageCommand { get; }
     public ICommand ViewServersCommand { get; }
     public ICommand ClearSelectedGameCommand { get; }
+    public ICommand SelectConversationCommand { get; }
+    public ICommand CloseConversationCommand { get; }
+    public ICommand DismissBannerCommand { get; }
 
     public MainViewModel()
     {
+        // Initialize with Server conversation
+        var serverConv = new ConversationViewModel { Title = "Server Chat", Id = "SERVER", IsDirectMessage = false };
+        Conversations.Add(serverConv);
+        SelectedConversation = serverConv;
+
+        DismissBannerCommand = new RelayCommand(_ => IsBannerVisible = false);
+
+        SelectConversationCommand = new RelayCommand(param =>
+        {
+            if (param is ConversationViewModel conv)
+            {
+                SelectedConversation = conv;
+            }
+            else if (param is ParticipantViewModel participant)
+            {
+                if (participant.UserId.HasValue)
+                {
+                    var dm = GetOrCreateDm(participant.UserId.Value, participant.Username);
+                    SelectedConversation = dm;
+                }
+            }
+        });
+
+        CloseConversationCommand = new RelayCommand(param =>
+        {
+            if (param is ConversationViewModel conv && conv.IsDirectMessage)
+            {
+                Conversations.Remove(conv);
+                if (SelectedConversation == conv)
+                {
+                    SelectedConversation = Conversations.FirstOrDefault();
+                }
+            }
+        });
+
         OpenGamePageCommand = new RelayCommand(param =>
         {
             if (param is long placeId)
@@ -72,6 +128,20 @@ public class MainViewModel : INotifyPropertyChanged
             if (SetField(ref _selectedGame, value))
             {
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsGameSelected)));
+            }
+        }
+    }
+
+    public ConversationViewModel? SelectedConversation
+    {
+        get => _selectedConversation;
+        set
+        {
+            if (SetField(ref _selectedConversation, value))
+            {
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Messages)));
+                if (_selectedConversation != null)
+                    _selectedConversation.IsUnread = false;
             }
         }
     }
@@ -126,6 +196,13 @@ public class MainViewModel : INotifyPropertyChanged
         set => SetField(ref _isConnected, value);
     }
 
+    private bool _isTestMode;
+    public bool IsTestMode
+    {
+        get => _isTestMode;
+        set => SetField(ref _isTestMode, value);
+    }
+
     public string TypingIndicator
     {
         get => _typingIndicator;
@@ -158,7 +235,26 @@ public class MainViewModel : INotifyPropertyChanged
 
     public void ResetMessages()
     {
-        Messages.Clear();
+        foreach (var conv in Conversations)
+        {
+            conv.Messages.Clear();
+        }
+    }
+
+    public ConversationViewModel GetOrCreateDm(long userId, string username)
+    {
+        var existing = Conversations.FirstOrDefault(c => c.IsDirectMessage && c.Id == userId.ToString());
+        if (existing != null) return existing;
+
+        var newConv = new ConversationViewModel
+        {
+            Id = userId.ToString(),
+            Title = username,
+            IsDirectMessage = true
+        };
+        
+        Conversations.Add(newConv);
+        return newConv;
     }
 
     public void UpdateTypingIndicator(IEnumerable<string> usernames)

@@ -3,6 +3,7 @@ import http from 'http';
 import { Server, Socket } from 'socket.io';
 import cors from 'cors';
 import { ChannelRegistry } from './services/ChannelRegistry';
+import { GroupRegistry } from './services/GroupRegistry';
 import { RobloxAvatarService } from './services/RobloxAvatarService';
 import axios from 'axios';
 
@@ -21,8 +22,10 @@ const io = new Server(server, {
 });
 
 const registry = new ChannelRegistry();
+const groupRegistry = new GroupRegistry();
 const avatarService = new RobloxAvatarService();
 const disconnectTimeouts = new Map<string, any>();
+const userSockets = new Map<number, string>(); // UserId -> SocketId
 
 io.on('connection', (socket: Socket) => {
     console.log('A user connected:', socket.id);
@@ -30,6 +33,10 @@ io.on('connection', (socket: Socket) => {
     socket.on('joinChannel', async (data: { jobId: string, username: string, userId?: number, placeId?: number }) => {
         const { jobId, username, userId, placeId } = data;
         if (!jobId || !username) return;
+
+        if (userId) {
+            userSockets.set(userId, socket.id);
+        }
 
         const previousJobId = (socket as any).jobId;
         const previousUsername = (socket as any).username;
@@ -63,6 +70,7 @@ io.on('connection', (socket: Socket) => {
         // Store session info on socket
         (socket as any).jobId = jobId;
         (socket as any).username = username;
+        if (userId) (socket as any).userId = userId;
 
         // Send snapshot to caller
         socket.emit('channelSnapshot', {
@@ -80,8 +88,20 @@ io.on('connection', (socket: Socket) => {
         });
     });
 
+    socket.on('searchUsers', async (query: string) => {
+        if (!query || query.length < 1) {
+            socket.emit('searchResults', []);
+            return;
+        }
+        
+        const jobId = (socket as any).jobId;
+        const results = registry.searchUsers(query, jobId);
+        socket.emit('searchResults', results);
+    });
+
     socket.on('getGames', async () => {
-        const games = registry.getGames();
+        // Filter out negative Job IDs (DMs)
+        const games = registry.getGames().filter(g => !g.jobId.startsWith('-'));
         const placeIds = [...new Set(games.map(g => g.placeId))];
 
         if (placeIds.length > 0) {
@@ -165,6 +185,41 @@ io.on('connection', (socket: Socket) => {
         const { jobId, username, content, userId } = data;
         if (!jobId || !username || !content) return;
 
+        // Handle DM routing (Negative Job IDs)
+        if (jobId.startsWith('-')) {
+            const targetUserId = parseInt(jobId.substring(1));
+            if (!isNaN(targetUserId)) {
+                const senderUserId = (socket as any).userId || userId;
+                
+                // Construct message
+                const message = {
+                    jobId, // Will be overridden for each recipient
+                    username,
+                    userId: senderUserId,
+                    content,
+                    timestamp: new Date(),
+                    avatarUrl: undefined // Could fetch if needed
+                };
+
+                // 1. Send to Target
+                const targetSocketId = userSockets.get(targetUserId);
+                if (targetSocketId) {
+                    // For the target, the conversation is with the SENDER.
+                    // So the JobId should be -SenderUserId
+                    const targetMessage = { ...message, jobId: `-${senderUserId}` };
+                    io.to(targetSocketId).emit('receiveMessage', targetMessage);
+                }
+
+                // 2. Echo to Sender
+                // For the sender, the conversation is with the TARGET.
+                // So the JobId should be -TargetUserId (which is the original jobId)
+                const senderMessage = { ...message, jobId: `-${targetUserId}` };
+                socket.emit('receiveMessage', senderMessage);
+                
+                return;
+            }
+        }
+
         const channel = registry.getChannel(jobId);
         if (!channel) return;
 
@@ -197,9 +252,90 @@ io.on('connection', (socket: Socket) => {
         });
     });
 
+    socket.on('sendPrivateMessage', (data: { toUserId: number, content: string, fromUsername: string, fromUserId: number }) => {
+        console.log('sendPrivateMessage received:', data);
+        const { toUserId, content, fromUsername, fromUserId } = data;
+        if (!toUserId || !content || !fromUserId) {
+            console.log('Invalid private message data');
+            return;
+        }
+
+        const targetSocketId = userSockets.get(toUserId);
+        console.log(`Target UserId: ${toUserId}, SocketId: ${targetSocketId}`);
+
+        const message = {
+            fromUserId,
+            fromUsername,
+            toUserId,
+            content,
+            timestamp: new Date()
+        };
+
+        // Only send to target if it's not the sender (avoid double echo)
+        if (targetSocketId && targetSocketId !== socket.id) {
+            io.to(targetSocketId).emit('receivePrivateMessage', message);
+        } else if (!targetSocketId) {
+            console.log('Target user not found in userSockets');
+        }
+        
+        // Echo back to sender so they know it was sent (and can display it)
+        socket.emit('receivePrivateMessage', message);
+    });
+
+    socket.on('getGroups', () => {
+        const userId = (socket as any).userId;
+        if (!userId) return;
+        
+        const groups = groupRegistry.getUserGroups(userId);
+        socket.emit('userGroups', groups);
+    });
+
+    socket.on('createGroup', (data: { participants: number[], name?: string }) => {
+        const userId = (socket as any).userId;
+        if (!userId) return;
+
+        const group = groupRegistry.createGroup(userId, data.participants, data.name);
+        
+        // Notify all participants
+        group.participants.forEach(pId => {
+            const sId = userSockets.get(pId);
+            if (sId) {
+                io.to(sId).emit('groupCreated', group);
+            }
+        });
+    });
+
+    socket.on('sendGroupMessage', (data: { groupId: string, content: string }) => {
+        const userId = (socket as any).userId;
+        const username = (socket as any).username;
+        if (!userId || !username) return;
+
+        const message = groupRegistry.addMessage(data.groupId, userId, username, data.content);
+        if (message) {
+            const group = groupRegistry.getGroup(data.groupId);
+            if (group) {
+                group.participants.forEach(pId => {
+                    const sId = userSockets.get(pId);
+                    if (sId) {
+                        io.to(sId).emit('receiveGroupMessage', message);
+                    }
+                });
+            }
+        }
+    });
+
     socket.on('disconnect', () => {
         const jobId = (socket as any).jobId;
         const username = (socket as any).username;
+        
+        // Remove from userSockets if we can find the userId
+        // Since we don't store userId on socket explicitly in joinChannel (only in closure), 
+        // we might need to iterate or store it. 
+        // Optimization: Store userId on socket.
+        const userId = (socket as any).userId;
+        if (userId) {
+            userSockets.delete(userId);
+        }
 
         if (jobId && username) {
             const key = `${jobId}:${username}`;

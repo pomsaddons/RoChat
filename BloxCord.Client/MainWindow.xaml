@@ -4,6 +4,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:converters="clr-namespace:BloxCord.Client.Converters"
+    xmlns:helpers="clr-namespace:BloxCord.Client.Helpers"
         mc:Ignorable="d"
         Title="RoChat"
         Height="720"
@@ -116,6 +117,7 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
@@ -137,8 +139,56 @@
             </StackPanel>
         </Grid>
 
+        <!-- Banner -->
+        <Border Grid.Row="1" Margin="12,0,12,12" 
+                Background="{Binding Banner.Background}" 
+                BorderBrush="{Binding Banner.Border}" 
+                BorderThickness="1" 
+                CornerRadius="8" 
+                Padding="12"
+                Visibility="{Binding IsBannerVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Banner.Title}" 
+                               Foreground="{Binding Banner.TitleColor}" 
+                               FontWeight="Bold" 
+                               FontSize="14" 
+                               Margin="0,0,0,4"/>
+                    <TextBlock Text="{Binding Banner.Message}" 
+                               Foreground="{Binding Banner.MessageColor}" 
+                               FontSize="13" 
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+
+                <Button Grid.Column="1" 
+                        Content="{Binding Banner.CtaText}" 
+                        Command="{Binding Banner.OpenCtaCommand}"
+                        Background="{Binding Banner.ButtonBackground}" 
+                        Foreground="{Binding Banner.ButtonText}"
+                        BorderThickness="0"
+                        Margin="12,0,0,0"
+                        Visibility="{Binding Banner.HasCta, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+                <Button Grid.Column="2" 
+                        Content="✕" 
+                        Command="{Binding DismissBannerCommand}"
+                        Background="Transparent" 
+                        Foreground="{Binding Banner.TitleColor}"
+                        BorderThickness="0"
+                        Margin="8,0,0,0"
+                        Padding="8"
+                        Visibility="{Binding Banner.IsDismissible, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+            </Grid>
+        </Border>
+
         <!-- Main Content -->
-        <Grid Grid.Row="1" x:Name="MainGrid" Background="{StaticResource AppBackground}" Margin="12,0,12,12" Opacity="0">
+        <Grid Grid.Row="2" x:Name="MainGrid" Background="{StaticResource AppBackground}" Margin="12,0,12,12" Opacity="0">
             <Grid.RenderTransform>
                 <TranslateTransform Y="20"/>
             </Grid.RenderTransform>
@@ -173,6 +223,7 @@
                                 <StackPanel Orientation="Horizontal">
                                     <Ellipse Width="8" Height="8" Fill="#34C759" Margin="0,0,6,0"/>
                                     <TextBlock Text="{Binding JobId}" FontSize="12" Foreground="#CCCCCC"/>
+                                    <TextBlock Text=" [DEV]" FontSize="12" Foreground="#FFCC00" FontWeight="Bold" Margin="5,0,0,0" Visibility="{Binding IsTestMode, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                                     <TextBlock Text=" • " FontSize="12" Foreground="#666666"/>
                                     <TextBlock Text="{Binding ParticipantCount, StringFormat={}{0} Online}" FontSize="12" Foreground="#AAAAAA"/>
                                 </StackPanel>
@@ -211,12 +262,96 @@
                             </Style>
                         </Grid.Style>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="3*" />
+                            <ColumnDefinition Width="200" />
                             <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
+                        <!-- Conversations List -->
+                        <Border Grid.Column="0" Background="{StaticResource CardBrush}" CornerRadius="{StaticResource MediumRadius}" Padding="{StaticResource CardPadding}" Margin="0,0,10,0">
+                            <StackPanel>
+                                <Grid Margin="0,0,0,12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Conversations" FontSize="16" FontWeight="SemiBold" Foreground="#CCCCCC" VerticalAlignment="Center"/>
+                                    <Button Grid.Column="1" Width="24" Height="24" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="NewConversation_Click" ToolTip="New Conversation">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}" CornerRadius="12">
+                                                    <Path Data="M 12,5 L 12,19 M 5,12 L 19,12" Stroke="#CCCCCC" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="Background" Value="#22FFFFFF"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                    </Button>
+                                </Grid>
+                                <ListBox ItemsSource="{Binding Conversations}" SelectedItem="{Binding SelectedConversation}" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" Padding="0">
+                                    <ListBox.ItemContainerStyle>
+                                        <Style TargetType="ListBoxItem">
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="ListBoxItem">
+                                                        <Border x:Name="Bd" 
+                                                                Background="{TemplateBinding Background}" 
+                                                                BorderBrush="{TemplateBinding BorderBrush}" 
+                                                                BorderThickness="{TemplateBinding BorderThickness}" 
+                                                                Padding="{TemplateBinding Padding}" 
+                                                                CornerRadius="8" 
+                                                                Margin="0,0,0,4">
+                                                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" 
+                                                                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                                                            SnapsToDevicePixels="true"/>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="Bd" Property="Background" Value="#1AFFFFFF"/>
+                                                            </Trigger>
+                                                            <Trigger Property="IsSelected" Value="True">
+                                                                <Setter TargetName="Bd" Property="Background" Value="#33FFFFFF"/>
+                                                                <Setter Property="Foreground" Value="White"/>
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                            <Setter Property="Padding" Value="10,8"/>
+                                            <Setter Property="Background" Value="Transparent"/>
+                                            <Setter Property="Cursor" Value="Hand"/>
+                                            <Setter Property="Foreground" Value="#CCCCCC"/>
+                                        </Style>
+                                    </ListBox.ItemContainerStyle>
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Background="Transparent">
+                                                <Grid.InputBindings>
+                                                    <MouseBinding Gesture="LeftClick" Command="{Binding DataContext.SelectConversationCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" />
+                                                </Grid.InputBindings>
+                                                <Grid.ContextMenu>
+                                                    <ContextMenu>
+                                                        <MenuItem Header="Close" Command="{Binding DataContext.CloseConversationCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" />
+                                                    </ContextMenu>
+                                                </Grid.ContextMenu>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                                <Border Grid.Column="1" Background="#E81123" CornerRadius="6" Width="12" Height="12" Margin="8,0,0,0" Visibility="{Binding IsUnread, Converter={StaticResource BooleanToVisibilityConverter}}" VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </StackPanel>
+                        </Border>
+
                         <!-- Messages -->
-                        <Border Background="{StaticResource CardBrush}" CornerRadius="{StaticResource MediumRadius}" Padding="0" Margin="0,0,10,0">
+                        <Border Grid.Column="1" Background="{StaticResource CardBrush}" CornerRadius="{StaticResource MediumRadius}" Padding="0" Margin="0,0,10,0">
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="*" />
@@ -280,7 +415,24 @@
                                                             <TextBlock Text="{Binding Timestamp, StringFormat={}{0:t}}" FontSize="11" Foreground="#888888" Margin="8,2,0,0" VerticalAlignment="Bottom"/>
                                                         </StackPanel>
                                                         <Border Background="#252525" CornerRadius="0,12,12,12" Padding="12,8" HorizontalAlignment="Left">
-                                                            <TextBlock Text="{Binding Content}" TextWrapping="Wrap" Foreground="#E0E0E0" FontSize="14" LineHeight="20"/>
+                                                            <StackPanel>
+                                                                <TextBlock helpers:Markdown.Text="{Binding Content}" TextWrapping="Wrap" Foreground="#E0E0E0" FontSize="14" LineHeight="20"/>
+                                                                <Image Source="{Binding ImageUrl}" MaxWidth="300" MaxHeight="300" Margin="0,8,0,0" Stretch="Uniform">
+                                                                    <Image.Style>
+                                                                        <Style TargetType="Image">
+                                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding ImageUrl}" Value="{x:Null}">
+                                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                                </DataTrigger>
+                                                                                <DataTrigger Binding="{Binding ImageUrl}" Value="">
+                                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </Image.Style>
+                                                                </Image>
+                                                            </StackPanel>
                                                         </Border>
                                                     </StackPanel>
 
@@ -317,7 +469,17 @@
                         </Border>
 
                         <!-- Participant list -->
-                        <Border Grid.Column="1" Background="{StaticResource CardBrush}" CornerRadius="{StaticResource MediumRadius}" Padding="{StaticResource CardPadding}">
+                        <Border Grid.Column="2" Width="240" Background="{StaticResource CardBrush}" CornerRadius="{StaticResource MediumRadius}" Padding="{StaticResource CardPadding}">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedConversation.IsDirectMessage}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
                             <StackPanel>
                                 <TextBlock Text="Participants" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12" Foreground="#CCCCCC"/>
                                 <ListBox ItemsSource="{Binding Participants}" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" Padding="0" Height="400">
@@ -327,6 +489,7 @@
                                                 <Grid.ContextMenu>
                                                     <ContextMenu>
                                                         <MenuItem Header="Go to Profile" Command="{Binding GoToProfileCommand}" />
+                                                        <MenuItem Header="Message" Command="{Binding DataContext.SelectConversationCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" />
                                                     </ContextMenu>
                                                 </Grid.ContextMenu>
                                                 <Grid.ColumnDefinitions>
@@ -552,6 +715,7 @@
                                      VerticalScrollBarVisibility="Auto"
                                      TextWrapping="Wrap"
                                      TextChanged="MessageInput_TextChanged" 
+                                     PreviewKeyDown="MessageInput_PreviewKeyDown"
                                      BorderThickness="0"
                                      Background="Transparent"
                                      VerticalContentAlignment="Center"

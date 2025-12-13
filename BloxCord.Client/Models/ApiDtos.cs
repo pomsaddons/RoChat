@@ -25,6 +25,24 @@ public sealed class ChatMessageDto
     public string? AvatarUrl { get; set; } = string.Empty;
 }
 
+public sealed class PrivateMessageDto
+{
+    [JsonPropertyName("fromUserId")]
+    public long FromUserId { get; set; }
+
+    [JsonPropertyName("fromUsername")]
+    public string FromUsername { get; set; } = string.Empty;
+
+    [JsonPropertyName("toUserId")]
+    public long ToUserId { get; set; }
+
+    [JsonPropertyName("content")]
+    public string Content { get; set; } = string.Empty;
+
+    [JsonPropertyName("timestamp")]
+    public DateTimeOffset Timestamp { get; set; } = DateTimeOffset.UtcNow;
+}
+
 public sealed class ChannelParticipantDto
 {
     [JsonPropertyName("username")]
@@ -36,6 +54,9 @@ public sealed class ChannelParticipantDto
 
     [JsonPropertyName("avatarUrl")]
     public string? AvatarUrl { get; set; } = string.Empty;
+
+    [JsonPropertyName("isTyping")]
+    public bool IsTyping { get; set; }
 }
 
 public sealed class ChannelSnapshotDto

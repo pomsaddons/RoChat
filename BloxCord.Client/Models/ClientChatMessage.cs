@@ -14,5 +14,7 @@ public class ClientChatMessage
 
     public string AvatarUrl { get; init; } = string.Empty;
 
+    public string? ImageUrl { get; set; }
+
     public bool IsSystemMessage { get; init; }
 }

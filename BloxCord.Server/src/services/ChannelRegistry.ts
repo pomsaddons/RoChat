@@ -49,6 +49,34 @@ export class ChannelRegistry {
         return this.channels.get(jobId);
     }
 
+    public searchUsers(query: string, jobId?: string): ChannelParticipant[] {
+        const lowerQuery = query.toLowerCase();
+        const results = new Map<string, ChannelParticipant>();
+
+        if (jobId) {
+            const channel = this.channels.get(jobId);
+            if (channel) {
+                for (const p of channel.getParticipants()) {
+                    if (p.username.toLowerCase().includes(lowerQuery)) {
+                        results.set(p.username, p);
+                    }
+                }
+            }
+        } else {
+            for (const channel of this.channels.values()) {
+                for (const p of channel.getParticipants()) {
+                    if (p.username.toLowerCase().includes(lowerQuery)) {
+                        if (!results.has(p.username)) {
+                            results.set(p.username, p);
+                        }
+                    }
+                }
+            }
+        }
+
+        return Array.from(results.values()).slice(0, 10);
+    }
+
     public removeParticipant(jobId: string, username: string) {
         const channel = this.channels.get(jobId);
         if (channel) {

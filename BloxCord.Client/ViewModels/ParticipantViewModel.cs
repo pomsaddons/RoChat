@@ -10,6 +10,7 @@ public class ParticipantViewModel : INotifyPropertyChanged
 {
     private string _avatarUrl = string.Empty;
     private bool _isTyping;
+    private bool _isSelected;
 
     public ICommand GoToProfileCommand { get; }
 
@@ -56,6 +57,12 @@ public class ParticipantViewModel : INotifyPropertyChanged
     {
         get => _isTyping;
         set => SetField(ref _isTyping, value);
+    }
+
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set => SetField(ref _isSelected, value);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

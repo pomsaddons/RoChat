@@ -36,6 +36,8 @@ public sealed class ChatClient : IAsyncDisposable
     public event EventHandler<List<ChannelParticipantDto>>? ParticipantsChanged;
     public event EventHandler<List<ChatMessageDto>>? HistoryReceived;
     public event EventHandler<TypingIndicatorDto>? TypingIndicatorReceived;
+    public event EventHandler<PrivateMessageDto>? PrivateMessageReceived;
+    public event EventHandler<List<ChannelParticipantDto>>? SearchResultsReceived;
 
     public async Task ConnectAsync(string username, string jobId, long? userId, long? placeId, CancellationToken cancellationToken = default)
     {
@@ -51,6 +53,12 @@ public sealed class ChatClient : IAsyncDisposable
             Reconnection = true,
             ReconnectionDelay = 1000,
             ReconnectionAttempts = int.MaxValue
+        });
+
+        _socket.On("searchResults", response =>
+        {
+            var results = response.GetValue<List<ChannelParticipantDto>>();
+            SearchResultsReceived?.Invoke(this, results);
         });
 
         _socket.On("receiveMessage", response =>
@@ -76,6 +84,12 @@ public sealed class ChatClient : IAsyncDisposable
         {
             var payload = response.GetValue<TypingIndicatorDto>();
             TypingIndicatorReceived?.Invoke(this, payload);
+        });
+
+        _socket.On("receivePrivateMessage", response =>
+        {
+            var message = response.GetValue<PrivateMessageDto>();
+            PrivateMessageReceived?.Invoke(this, message);
         });
 
         _socket.On("gamesList", response =>
@@ -166,6 +180,41 @@ public sealed class ChatClient : IAsyncDisposable
             jobId = _jobId,
             username = _username,
             isTyping = isTyping
+        });
+    }
+
+    public async Task SendPrivateMessageAsync(long toUserId, string content, CancellationToken cancellationToken = default)
+    {
+        if (_socket is null || !_socket.Connected || _username is null || _userId is null)
+            return;
+
+        await _socket.EmitAsync("sendPrivateMessage", new
+        {
+            toUserId = toUserId,
+            content = content,
+            fromUsername = _username,
+            fromUserId = _userId
+        });
+    }
+
+    public async Task SearchUsers(string query)
+    {
+        if (_socket is null || !_socket.Connected)
+            return;
+
+        await _socket.EmitAsync("searchUsers", query);
+    }
+
+    public async Task SendToChannelAsync(string jobId, string content)
+    {
+        if (_socket is null || !_socket.Connected || _username is null) return;
+        
+        await _socket.EmitAsync("sendMessage", new
+        {
+            jobId = jobId,
+            username = _username,
+            userId = _userId,
+            content = content
         });
     }
 

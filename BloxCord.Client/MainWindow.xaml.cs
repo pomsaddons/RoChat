@@ -9,6 +9,10 @@ using System.Windows.Media;
 using BloxCord.Client.Models;
 using BloxCord.Client.Services;
 using BloxCord.Client.ViewModels;
+using Microsoft.Toolkit.Uwp.Notifications;
+using System.Text.RegularExpressions;
+using System.Net.Http;
+using System.Text.Json;
 
 namespace BloxCord.Client;
 
@@ -19,6 +23,7 @@ public partial class MainWindow : Window
 {
     private readonly MainViewModel _viewModel = new();
     private ChatClient? _chatClient;
+    private readonly DiscordRpcService _discordRpc = new();
     private readonly Dictionary<string, ParticipantViewModel> _participantLookup = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<long, string> _avatarUrlCache = new();
     private readonly DispatcherTimer _typingTimer;
@@ -28,6 +33,9 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         
+        _discordRpc.Initialize();
+        _discordRpc.SetStatus("Browsing Servers", "Idle");
+
         // Load config
         ConfigService.Load();
         _viewModel.BackendUrl = ConfigService.Current.BackendUrl;
@@ -62,7 +70,11 @@ public partial class MainWindow : Window
         }
 
         DataContext = _viewModel;
-        Closed += async (_, _) => await DisposeClientAsync();
+        Closed += async (_, _) => 
+        {
+            await DisposeClientAsync();
+            _discordRpc.Dispose();
+        };
 
         _typingTimer = new DispatcherTimer
         {
@@ -78,39 +90,83 @@ public partial class MainWindow : Window
                 MessagesScrollViewer.ScrollToBottom();
             }
         };
+
+        _ = FetchBannerAsync();
+    }
+
+    private async Task FetchBannerAsync()
+    {
+        try
+        {
+            using var client = new HttpClient();
+            // Add cache buster
+            var url = $"https://raw.githubusercontent.com/pompompur1nn/RoChatBanner/refs/heads/main/banners.json?t={DateTime.UtcNow.Ticks}";
+            var json = await client.GetStringAsync(url);
+            var banner = JsonSerializer.Deserialize<BannerDto>(json);
+
+            if (banner != null && banner.Enabled)
+            {
+                _viewModel.Banner = new BannerViewModel(banner);
+                _viewModel.IsBannerVisible = true;
+            }
+        }
+        catch
+        {
+            // Ignore banner fetch errors
+        }
+    }
+
+    public void EnableTestMode()
+    {
+        var random = new Random();
+        var testId = random.Next(1000000, 9999999);
+        _viewModel.Username = $"TestUser_{testId}";
+        _viewModel.UserId = testId.ToString();
+        _viewModel.SessionUserId = testId;
+        _viewModel.IsTestMode = true;
+        Title += " [TEST MODE]";
+        _viewModel.JobId = "TEST_SERVER_JOB_ID";
     }
 
     private async void Connect_Click(object sender, RoutedEventArgs e)
     {
         _viewModel.IsServerBrowserVisible = false;
-        // Auto-load session info first
-        _viewModel.StatusMessage = "Reading Roblox logs...";
-        try
+        
+        if (!_viewModel.IsTestMode)
         {
-            var session = await RobloxLogParser.TryReadLatestAsync();
-            if (session is not null)
+            // Auto-load session info first
+            _viewModel.StatusMessage = "Reading Roblox logs...";
+            try
             {
-                if (!string.IsNullOrWhiteSpace(session.Username))
-                    _viewModel.Username = session.Username;
+                var session = await RobloxLogParser.TryReadLatestAsync();
+                if (session is not null)
+                {
+                    if (!string.IsNullOrWhiteSpace(session.Username))
+                        _viewModel.Username = session.Username;
 
-                _viewModel.JobId = session.JobId;
-                _viewModel.UserId = session.UserId?.ToString() ?? string.Empty;
-                _viewModel.SessionUserId = session.UserId;
-                _viewModel.PlaceId = session.PlaceId;
-                _viewModel.StatusMessage = "Session info loaded from Roblox logs.";
+                    _viewModel.JobId = session.JobId;
+                    _viewModel.UserId = session.UserId?.ToString() ?? string.Empty;
+                    _viewModel.SessionUserId = session.UserId;
+                    _viewModel.PlaceId = session.PlaceId;
+                    _viewModel.StatusMessage = "Session info loaded from Roblox logs.";
+                }
+                else
+                {
+                    _viewModel.StatusMessage = "No active Roblox session detected.";
+                    MessageBox.Show("Could not find an active Roblox session in the logs. Please ensure you are in a game.", "Connection Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
             }
-            else
+            catch (Exception ex)
             {
-                _viewModel.StatusMessage = "No active Roblox session detected.";
-                MessageBox.Show("Could not find an active Roblox session in the logs. Please ensure you are in a game.", "Connection Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                _viewModel.StatusMessage = $"Failed to read logs: {ex.Message}";
+                MessageBox.Show($"Failed to read logs: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
         }
-        catch (Exception ex)
+        else
         {
-            _viewModel.StatusMessage = $"Failed to read logs: {ex.Message}";
-            MessageBox.Show($"Failed to read logs: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            return;
+             _viewModel.StatusMessage = "Test Mode Active.";
         }
 
         if (string.IsNullOrWhiteSpace(_viewModel.BackendUrl) ||
@@ -132,17 +188,36 @@ public partial class MainWindow : Window
             _chatClient.ParticipantsChanged += HandleParticipantsChanged;
             _chatClient.HistoryReceived += HandleHistoryReceived;
             _chatClient.TypingIndicatorReceived += HandleTypingIndicator;
+            _chatClient.PrivateMessageReceived += HandlePrivateMessageReceived;
 
             _participantLookup.Clear();
             _viewModel.Participants.Clear();
             _viewModel.ResetMessages();
 
             var userId = ResolveUserId();
+            
+            if (userId == null && !string.IsNullOrEmpty(_viewModel.Username))
+            {
+                try 
+                {
+                    userId = await RobloxUsernameDirectory.TryResolveUserIdAsync(_viewModel.Username);
+                    if (userId.HasValue)
+                    {
+                        _viewModel.SessionUserId = userId;
+                    }
+                }
+                catch
+                {
+                    // Ignore resolution errors, proceed without ID (DMs might not work)
+                }
+            }
 
             await _chatClient.ConnectAsync(_viewModel.Username, _viewModel.JobId, userId, _viewModel.PlaceId);
 
             _viewModel.IsConnected = true;
-            _viewModel.StatusMessage = $"Connected to channel {_viewModel.JobId}.";
+            _viewModel.StatusMessage = "Connected!";
+            
+            _discordRpc.SetStatus("Chatting in Game", $"Playing as {_viewModel.Username}", startTime: DateTime.UtcNow);
         }
         catch (Exception ex)
         {
@@ -160,6 +235,7 @@ public partial class MainWindow : Window
         _viewModel.ResetMessages();
         _viewModel.IsConnected = false;
         _viewModel.StatusMessage = "Disconnected.";
+        _discordRpc.SetStatus("Browsing Servers", "Idle");
     }
 
     private async void Send_Click(object sender, RoutedEventArgs e)
@@ -180,7 +256,33 @@ public partial class MainWindow : Window
             if (message.Length == 0)
                 return;
 
-            await _chatClient.SendAsync(message);
+            if (_viewModel.SelectedConversation != null)
+            {
+                if (_viewModel.SelectedConversation.IsDirectMessage)
+                {
+                    // Use the new "Game" based DM system (JobId = -TargetUserId)
+                    if (long.TryParse(_viewModel.SelectedConversation.Id, out var toUserId))
+                    {
+                        // If the ID is already negative (from incoming), use it. If positive (from user selection), negate it.
+                        // Actually, GetOrCreateDm sets ID to positive UserId usually.
+                        // But we want to send to "-TargetUserId".
+                        // Wait, if I send to -200, I am talking to User 200.
+                        // So jobId should be "-200".
+                        
+                        var targetJobId = toUserId > 0 ? $"-{toUserId}" : toUserId.ToString();
+                        await _chatClient.SendToChannelAsync(targetJobId, message);
+                    }
+                }
+                else
+                {
+                    await _chatClient.SendAsync(message);
+                }
+            }
+            else
+            {
+                await _chatClient.SendAsync(message);
+            }
+
             _viewModel.OutgoingMessage = string.Empty;
             await TryNotifyTypingAsync(false);
             _typingTimer.Stop();
@@ -192,22 +294,209 @@ public partial class MainWindow : Window
         }
     }
 
+    private void MessageInput_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.Enter && (System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Shift) != System.Windows.Input.ModifierKeys.Shift)
+        {
+            e.Handled = true;
+            Send_Click(sender, e);
+        }
+    }
+
     private async void HandleMessageReceived(object? sender, ChatMessageDto dto)
     {
         var resolution = await ResolveAvatarAsync(dto.UserId, dto.Username, dto.AvatarUrl);
+        var imageUrl = await ExtractImageUrlAsync(dto.Content);
 
         await Dispatcher.InvokeAsync(() =>
         {
-            _viewModel.Messages.Add(new ClientChatMessage
+            // Check if this is a DM (Negative JobId)
+            if (dto.JobId.StartsWith("-"))
+            {
+                // Parse the ID to find out who the conversation is with
+                if (long.TryParse(dto.JobId.Substring(1), out var otherUserId))
+                {
+                    // If I sent it, the JobId is -TargetUserId.
+                    // If I received it, the JobId is -SenderUserId.
+                    // In both cases, the "otherUserId" derived from JobId is the person I am talking to.
+                    // Wait.
+                    // If I send to -200. Server echoes with JobId -200.
+                    // I should see it in conversation with User 200.
+                    // If User 200 sends to me (-100). Server sends to me with JobId -200.
+                    // I should see it in conversation with User 200.
+                    // So in ALL cases, the JobId tells me which conversation it belongs to.
+                    // JobId "-200" -> Conversation with User 200.
+                    
+                    // We need the username. If it's a new conversation, we might not have it.
+                    // If it's incoming from someone else, dto.Username is their username.
+                    // If it's my own echo, dto.Username is my username.
+                    
+                    string conversationName = "Unknown";
+                    if (dto.UserId != _viewModel.SessionUserId)
+                    {
+                        conversationName = dto.Username;
+                    }
+                    else
+                    {
+                        // It's me. I need to find the name of User 200.
+                        // We might have it in cache or existing conversation.
+                        var existing = _viewModel.Conversations.FirstOrDefault(c => c.Id == otherUserId.ToString());
+                        if (existing != null) conversationName = existing.Title;
+                    }
+
+                    var conv = _viewModel.GetOrCreateDm(otherUserId, conversationName);
+                    
+                    conv.Messages.Add(new ClientChatMessage
+                    {
+                        JobId = dto.JobId,
+                        Username = dto.Username,
+                        Content = dto.Content,
+                        Timestamp = dto.Timestamp.LocalDateTime,
+                        UserId = dto.UserId,
+                        AvatarUrl = resolution.AvatarUrl,
+                        ImageUrl = imageUrl
+                    });
+
+                    if (_viewModel.SelectedConversation != conv)
+                    {
+                        conv.IsUnread = true;
+                        ShowNotification($"DM from {dto.Username}", dto.Content);
+                    }
+                    else if (!IsActive)
+                    {
+                        ShowNotification($"DM from {dto.Username}", dto.Content);
+                    }
+                    return;
+                }
+            }
+
+            // Find Server conversation
+            var serverConv = _viewModel.Conversations.FirstOrDefault(c => !c.IsDirectMessage);
+            if (serverConv != null)
+            {
+                serverConv.Messages.Add(new ClientChatMessage
+                {
+                    Content = dto.Content,
+                    JobId = dto.JobId,
+                    Username = dto.Username,
+                    Timestamp = dto.Timestamp.LocalDateTime,
+                    UserId = resolution.UserId,
+                    AvatarUrl = resolution.AvatarUrl,
+                    ImageUrl = imageUrl
+                });
+
+                if (_viewModel.SelectedConversation != serverConv)
+                {
+                    serverConv.IsUnread = true;
+                    ShowNotification($"#{serverConv.Title}", $"{dto.Username}: {dto.Content}");
+                }
+                else if (!IsActive)
+                {
+                    ShowNotification($"#{serverConv.Title}", $"{dto.Username}: {dto.Content}");
+                }
+            }
+        }, DispatcherPriority.Background);
+    }
+
+    private async void HandlePrivateMessageReceived(object? sender, PrivateMessageDto dto)
+    {
+        // Determine the other party
+        // If I sent it, the other party is ToUserId. If I received it, the other party is FromUserId.
+        long otherUserId;
+        string otherUsername;
+        
+        // We need to know our own UserId. It's in _viewModel.SessionUserId
+        var myUserId = _viewModel.SessionUserId;
+
+        if (dto.FromUserId == myUserId)
+        {
+            otherUserId = dto.ToUserId;
+            // If we are DMing ourselves, we know the username
+            if (otherUserId == myUserId)
+            {
+                otherUsername = dto.FromUsername;
+            }
+            else
+            {
+                otherUsername = "Unknown"; // Placeholder, will be updated if conversation exists
+            }
+        }
+        else
+        {
+            otherUserId = dto.FromUserId;
+            otherUsername = dto.FromUsername;
+        }
+
+        var resolution = await ResolveAvatarAsync(dto.FromUserId, dto.FromUsername, null);
+        var imageUrl = await ExtractImageUrlAsync(dto.Content);
+
+        await Dispatcher.InvokeAsync(() =>
+        {
+            var conv = _viewModel.GetOrCreateDm(otherUserId, otherUsername);
+            // If we just created it and didn't know the username (outgoing case), we might want to update title if possible
+            // But for outgoing, we usually create conversation BEFORE sending.
+            
+            if (conv.Title == "Unknown" && !string.IsNullOrEmpty(otherUsername) && otherUsername != "Unknown")
+            {
+                conv.Title = otherUsername;
+            }
+
+            conv.Messages.Add(new ClientChatMessage
             {
                 Content = dto.Content,
-                JobId = dto.JobId,
-                Username = dto.Username,
+                Username = dto.FromUsername,
                 Timestamp = dto.Timestamp.LocalDateTime,
-                UserId = resolution.UserId,
-                AvatarUrl = resolution.AvatarUrl
+                UserId = dto.FromUserId,
+                AvatarUrl = resolution.AvatarUrl,
+                IsSystemMessage = false,
+                ImageUrl = imageUrl,
+                JobId = "DM"
             });
-        }, DispatcherPriority.Background);
+
+            if (_viewModel.SelectedConversation != conv)
+            {
+                conv.IsUnread = true;
+                ShowNotification($"DM from {dto.FromUsername}", dto.Content);
+            }
+            else if (!IsActive)
+            {
+                ShowNotification($"DM from {dto.FromUsername}", dto.Content);
+            }
+        });
+    }
+
+    private async Task<string?> ExtractImageUrlAsync(string content)
+    {
+        var match = Regex.Match(content, @"rbxassetid://(\d+)");
+        if (!match.Success)
+        {
+            match = Regex.Match(content, @"roblox\.com/library/(\d+)");
+        }
+
+        if (match.Success && long.TryParse(match.Groups[1].Value, out var assetId))
+        {
+            return await RobloxAssetService.ResolveDecalAsync(assetId);
+        }
+        return null;
+    }
+
+    private void ShowNotification(string title, string content)
+    {
+        try
+        {
+            var builder = new ToastContentBuilder()
+                .AddText(title)
+                .AddText(content);
+
+            var iconPath = System.IO.Path.GetFullPath("rochatlogo.png");
+            if (System.IO.File.Exists(iconPath))
+            {
+                builder.AddAppLogoOverride(new Uri(iconPath), ToastGenericAppLogoCrop.Circle);
+            }
+
+            builder.Show();
+        }
+        catch { }
     }
 
     private async void HandleParticipantsChanged(object? sender, List<ChannelParticipantDto> participants)
@@ -227,6 +516,8 @@ public partial class MainWindow : Window
                     .Where(existing => !incomingSet.Contains(existing))
                     .ToList();
 
+                var serverConv = _viewModel.Conversations.FirstOrDefault(c => !c.IsDirectMessage);
+
                 foreach (var username in toRemove)
                 {
                     if (_participantLookup.TryGetValue(username, out var existingVm))
@@ -235,14 +526,17 @@ public partial class MainWindow : Window
                         _viewModel.Participants.Remove(existingVm);
                         
                         // Add System Message
-                        _viewModel.Messages.Add(new ClientChatMessage
+                        if (serverConv != null)
                         {
-                            Username = "System",
-                            Content = $"{username} left the chat",
-                            Timestamp = DateTime.Now,
-                            JobId = _viewModel.JobId,
-                            IsSystemMessage = true
-                        });
+                            serverConv.Messages.Add(new ClientChatMessage
+                            {
+                                Username = "System",
+                                Content = $"{username} left the chat",
+                                Timestamp = DateTime.Now,
+                                JobId = _viewModel.JobId,
+                                IsSystemMessage = true
+                            });
+                        }
                     }
                 }
 
@@ -263,9 +557,9 @@ public partial class MainWindow : Window
                         _ = EnsureAvatarForParticipantAsync(vm);
 
                         // Add System Message (only if we are already connected to avoid spam on initial load)
-                        if (_viewModel.IsConnected) 
+                        if (_viewModel.IsConnected && serverConv != null) 
                         {
-                            _viewModel.Messages.Add(new ClientChatMessage
+                            serverConv.Messages.Add(new ClientChatMessage
                             {
                                 Username = "System",
                                 Content = $"{dto.Username} joined the chat",
@@ -305,6 +599,9 @@ public partial class MainWindow : Window
 
     private async void HandleHistoryReceived(object? sender, List<ChatMessageDto> history)
     {
+        var serverConv = _viewModel.Conversations.FirstOrDefault(c => !c.IsDirectMessage);
+        if (serverConv == null) return;
+
         var ordered = history
             .OrderBy(m => m.Timestamp)
             .ToList();
@@ -328,13 +625,13 @@ public partial class MainWindow : Window
 
         await Dispatcher.InvokeAsync(() =>
         {
-            _viewModel.ResetMessages();
+            serverConv.Messages.Clear();
 
             foreach (var message in prepared)
-                _viewModel.Messages.Add(message);
+                serverConv.Messages.Add(message);
 
             // Add Safety Warning
-            _viewModel.Messages.Add(new ClientChatMessage
+            serverConv.Messages.Add(new ClientChatMessage
             {
                 Username = "System",
                 Content = "This chat is unmoderated. Be careful sharing personal information and connecting outside of RoChat.",
@@ -577,10 +874,51 @@ public partial class MainWindow : Window
                     var userId = ResolveUserId();
                     await _chatClient.ConnectAsync(_viewModel.Username, _viewModel.JobId, userId, _viewModel.PlaceId);
                     _viewModel.IsConnected = true;
+                    
+                    _discordRpc.SetStatus($"Playing {game.Name}", $"Server: {game.Servers.FirstOrDefault(s => s.JobId == jobId)?.PlayerCount ?? 0} Players", startTime: DateTime.UtcNow);
                 }
                 catch (Exception ex)
                 {
                     MessageBox.Show($"Failed to join: {ex.Message}");
+                }
+            }
+        }
+    }
+
+    private void NewConversation_Click(object sender, RoutedEventArgs e)
+    {
+        if (_chatClient == null || !_viewModel.IsConnected)
+        {
+            MessageBox.Show("You must be connected to a server to search for users.", "Not Connected", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var searchWindow = new UserSearchWindow(_chatClient)
+        {
+            Owner = this
+        };
+
+        if (searchWindow.ShowDialog() == true && searchWindow.SelectedUser != null)
+        {
+            var user = searchWindow.SelectedUser;
+            // Check if we already have a conversation with this user
+            var existingConv = _viewModel.Conversations.FirstOrDefault(c => c.IsDirectMessage && c.Title == user.Username);
+            
+            if (existingConv != null)
+            {
+                _viewModel.SelectedConversation = existingConv;
+            }
+            else
+            {
+                // Create new DM conversation
+                if (user.UserId.HasValue)
+                {
+                     var conv = _viewModel.GetOrCreateDm(user.UserId.Value, user.Username);
+                     _viewModel.SelectedConversation = conv;
+                }
+                else
+                {
+                     MessageBox.Show("Could not determine User ID for selected user.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
         }
